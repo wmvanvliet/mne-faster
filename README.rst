@@ -13,7 +13,8 @@ Installation
 ------------
 
 .. code-block:: bash
-    pip install https://github.com/wmvanvliet/mne-faster/archive/refs/heads/main.zip
+
+   pip install https://github.com/wmvanvliet/mne-faster/archive/refs/heads/main.zip
 
 
 Usage
