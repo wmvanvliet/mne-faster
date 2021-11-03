@@ -389,11 +389,10 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
     source_data = ica.get_sources(epochs).get_data().transpose(1, 0, 2)
     source_data = source_data.reshape(source_data.shape[0], -1)
 
-    if prange is not None:
+    if prange is None:
         prange = (ica.info['highpass'], ica.info['lowpass'])
-    else:
-        if len(prange) != 2:
-            raise ValueError('prange must be a pair of floats')
+    if len(prange) != 2:
+        raise ValueError('prange must be a pair of floats')
 
     metrics = {
         'eog_correlation': lambda x: x.find_bads_eog(epochs)[1],
