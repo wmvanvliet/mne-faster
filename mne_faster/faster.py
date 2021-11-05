@@ -343,7 +343,7 @@ def _power_gradient(data, sfreq, prange):
 
 
 def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
-                        return_by_metric=False):
+                        prange=None, return_by_metric=False):
     """Implements the third step of the FASTER algorithm.
 
     This function attempts to automatically mark bad ICA components by
@@ -366,6 +366,11 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
             'eog_correlation', 'kurtosis', 'power_gradient', 'hurst',
             'median_gradient'
         Defaults to all of them.
+    prange : None | pair of floats
+        The (lower, upper) frequency limits of the power spectrum to use for
+        the power gradient computation. In the FASTER paper, they set these to
+        the passband of the highpass and lowpass filter. If None, defaults to
+        the 'highpass' and 'lowpass' filter settings in ica.info.
     return_by_metric : bool
         Whether to return the bad channels as a flat list (False, default) or
         as a dictionary with the names of the used metrics as keys and the
@@ -384,6 +389,11 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
     source_data = ica.get_sources(epochs).get_data().transpose(1, 0, 2)
     source_data = source_data.reshape(source_data.shape[0], -1)
 
+    if prange is None:
+        prange = (ica.info['highpass'], ica.info['lowpass'])
+    if len(prange) != 2:
+        raise ValueError('prange must be a pair of floats')
+
     metrics = {
         'eog_correlation': lambda x: x.find_bads_eog(epochs)[1],
         'kurtosis': lambda x: kurtosis(
@@ -391,7 +401,9 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
                 x.mixing_matrix_.T,
                 x.pca_components_[:x.n_components_]),
             axis=1),
-        'power_gradient': lambda x: _power_gradient(x, source_data),
+        'power_gradient': lambda x: _power_gradient(source_data,
+                                                    ica.info['sfreq'],
+                                                    prange),
         'hurst': lambda x: hurst(source_data),
         'median_gradient': lambda x: np.median(np.abs(np.diff(source_data)),
                                                axis=1),
