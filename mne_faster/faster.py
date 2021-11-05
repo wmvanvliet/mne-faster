@@ -366,7 +366,7 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
             'eog_correlation', 'kurtosis', 'power_gradient', 'hurst',
             'median_gradient'
         Defaults to all of them.
-    pfreqs : None | pair of floats
+    prange : None | pair of floats
         The (lower, upper) frequency limits of the power spectrum to use for
         the power gradient computation. In the FASTER paper, they set these to
         the passband of the highpass and lowpass filter. If None, defaults to
