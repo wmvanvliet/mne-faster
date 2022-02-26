@@ -17,7 +17,8 @@ import mne
 from mne import io
 from mne.datasets import sample
 
-from mne_faster import (find_bad_channels, find_bad_epochs, find_bad_channels_in_epochs)
+from mne_faster import (find_bad_channels, find_bad_epochs,
+                        find_bad_components, find_bad_channels_in_epochs)
 
 # Load raw data
 data_path = sample.data_path()
@@ -51,9 +52,7 @@ epochs = mne.Epochs(raw, events, event_ids, tmin, tmax, baseline=(None, 0),
 
 # Compute evoked before cleaning, using an average EEG reference
 epochs_before = epochs.copy()
-epochs_before.info['custom_ref_applied'] = False
-epochs_before, _ = io.set_eeg_reference(epochs_before)
-epochs_before.apply_proj()
+epochs_before.set_eeg_reference('average')
 evoked_before = epochs_before.average()
 
 ###############################################################################
@@ -69,7 +68,14 @@ bad_epochs = find_bad_epochs(epochs)
 if len(bad_epochs) > 0:
     epochs.drop(bad_epochs)
 
-# Step 3: mark bad channels for each epoch and interpolate them.
+# Step 3: mark bad ICA components (using the build-in MNE functionality for this)
+ica = mne.preprocessing.ICA(0.99).fit(epochs)
+ica.exclude = find_bad_components(ica, epochs)
+ica.apply(epochs)
+# Need to re-baseline data after ICA transformation
+epochs.apply_baseline(epochs.baseline)
+
+# Step 4: mark bad channels for each epoch and interpolate them.
 bad_channels_per_epoch = find_bad_channels_in_epochs(epochs, eeg_ref_corr=True)
 for i, b in enumerate(bad_channels_per_epoch):
     if len(b) > 0:
@@ -79,12 +85,10 @@ for i, b in enumerate(bad_channels_per_epoch):
         epochs._data[i, :, :] = ep._data[0, :, :]
 
 # Compute evoked after cleaning, using an average EEG reference
-epochs.info['custom_ref_applied'] = False
-epochs, _ = io.set_eeg_reference(epochs)
-epochs.apply_proj()
+epochs.set_eeg_reference('average')
 evoked_after = epochs.average()
 
-###############################################################################
+##############################################################################
 # Plot the evokeds of the data, before and after cleaning
 evoked_before.plot()
 evoked_after.plot()

@@ -536,9 +536,10 @@ def run_faster(epochs, thres=3, copy=True):
     logger.info('Step 3: mark bad ICA components')
     picks = mne.pick_types(epochs.info, meg=False, eeg=True, eog=True,
                            exclude='bads')
-    ica = mne.preprocessing.run_ica(epochs, len(picks), picks=picks,
-                                    eog_ch=['vEOG', 'hEOG'])
+    ica = mne.preprocessing.ICA(len(picks)).fit(epochs, picks=picks)
+    ica.exclude = find_bad_components(ica, epochs, thres=thres)
     ica.apply(epochs)
+    epochs.apply_baseline(epochs.baseline)
 
     # Step four
     logger.info('Step 4: mark bad channels for each epoch')
@@ -547,13 +548,11 @@ def run_faster(epochs, thres=3, copy=True):
         if len(b) > 0:
             epoch = epochs[i]
             epoch.info['bads'] += b
-            epoch.interpolate_bads_eeg()
+            epoch.interpolate_bads()
             epochs._data[i, :, :] = epoch._data[0, :, :]
 
     # Now that the data is clean, apply average reference
-    epochs.info['custom_ref_applied'] = False
-    epochs, _ = mne.io.set_eeg_reference(epochs)
-    epochs.apply_proj()
+    epochs.set_eeg_reference('average')
 
     # That's all for now
     return epochs
