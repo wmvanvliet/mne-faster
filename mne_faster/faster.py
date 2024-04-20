@@ -1,22 +1,23 @@
 from collections import defaultdict
+
+import mne
 import numpy as np
 import scipy.signal
-import mne
-from scipy.stats import kurtosis
-from mne.preprocessing.bads import _find_outliers
-from mne.utils import logger
 from mne import pick_info
 from mne._fiff.pick import _picks_by_type
+from mne.preprocessing.bads import _find_outliers
+from mne.utils import logger
+from scipy.stats import kurtosis
 
 
 def _bad_mask_to_names(info, bad_mask):
-    """Remap mask to ch names"""
+    """Remap mask to ch names."""
     bad_idx = [np.where(m)[0] for m in bad_mask]
-    return [[info['ch_names'][k] for k in epoch] for epoch in bad_idx]
+    return [[info["ch_names"][k] for k in epoch] for epoch in bad_idx]
 
 
 def _combine_indices(bads):
-    """summarize indices"""
+    """Summarize indices."""
     return list(set(v for val in bads.values() if len(val) > 0 for v in val))
 
 
@@ -42,22 +43,24 @@ def hurst(x):
 
     # second order derivative
     y1 = scipy.signal.lfilter(b1, 1, y, axis=1)
-    y1 = y1[:, len(b1) - 1:-1]  # first values contain filter artifacts
+    y1 = y1[:, len(b1) - 1 : -1]  # first values contain filter artifacts
 
     # wider second order derivative
     y2 = scipy.signal.lfilter(b2, 1, y, axis=1)
-    y2 = y2[:, len(b2) - 1:-1]  # first values contain filter artifacts
+    y2 = y2[:, len(b2) - 1 : -1]  # first values contain filter artifacts
 
-    s1 = np.mean(y1 ** 2, axis=1)
-    s2 = np.mean(y2 ** 2, axis=1)
+    s1 = np.mean(y1**2, axis=1)
+    s2 = np.mean(y2**2, axis=1)
 
     return 0.5 * np.log2(s2 / s1)
 
 
 def _efficient_welch(data, sfreq):
-    """Calls scipy.signal.welch with parameters optimized for greatest speed
-    at the expense of precision. The window is set to ~10 seconds and windows
-    are non-overlapping.
+    """Call scipy.signal.welch with parameters optimized for greatest speed.
+
+    Comes at the expense of precision. The window is set to ~10 seconds and windows are
+    non-overlapping.
+
     Parameters
     ----------
     data : array, shape (..., n_samples)
@@ -65,6 +68,7 @@ def _efficient_welch(data, sfreq):
         is assumed to be time.
     sfreq : float
         The sample rate of the timeseries.
+
     Returns
     -------
     fs : array of float
@@ -73,8 +77,8 @@ def _efficient_welch(data, sfreq):
         The power spectra for each timeseries.
     """
     from scipy.signal import welch
-    nperseg = min(data.shape[-1],
-                  2 ** int(np.log2(10 * sfreq) + 1))  # next power of 2
+
+    nperseg = min(data.shape[-1], 2 ** int(np.log2(10 * sfreq) + 1))  # next power of 2
 
     return welch(data, sfreq, nperseg=nperseg, noverlap=0, axis=-1)
 
@@ -85,22 +89,24 @@ def _freqs_power(data, sfreq, freqs):
         return np.sum([ps[..., np.searchsorted(fs, f)] for f in freqs], axis=0)
     except IndexError:
         raise ValueError(
-            ("Insufficient sample rate to  estimate power at {} Hz for line "
-             "noise detection. Use the 'metrics' parameter to disable the "
-             "'line_noise' metric.").format(freqs))
+            (
+                "Insufficient sample rate to  estimate power at {} Hz for line "
+                "noise detection. Use the 'metrics' parameter to disable the "
+                "'line_noise' metric."
+            ).format(freqs)
+        )
 
 
 def _distance_correction(info, picks, x):
     """Remove the effect of distance to reference sensor.
 
-    Computes the distance of each sensor to the reference sensor. Then
-    regresses the effect of this distance out of the values in x.
+    Computes the distance of each sensor to the reference sensor. Then regresses the
+    effect of this distance out of the values in x.
 
     Parameters
     ----------
     info : instance of Info
-        The measurement info. This should contain positions for all the
-        sensors.
+        The measurement info. This should contain positions for all the sensors.
     picks : list of int
         Indices of the channels that correspond to the values in x.
     x : list of float
@@ -111,17 +117,21 @@ def _distance_correction(info, picks, x):
     x_corr : list of float
         values in x corrected for the distance to reference sensor.
     """
-    pos = np.array([info['chs'][ch]['loc'][:3] for ch in picks])
-    ref_pos = np.array([info['chs'][ch]['loc'][3:6] for ch in picks])
+    pos = np.array([info["chs"][ch]["loc"][:3] for ch in picks])
+    ref_pos = np.array([info["chs"][ch]["loc"][3:6] for ch in picks])
 
     if np.any(np.all(pos == 0, axis=1)):
-        raise ValueError('Cannot perform correction for distance to reference '
-                         'sensor: not all selected channels have position '
-                         'information.')
+        raise ValueError(
+            "Cannot perform correction for distance to reference "
+            "sensor: not all selected channels have position "
+            "information."
+        )
     if np.any(np.all(ref_pos == 0, axis=1)):
-        raise ValueError('Cannot perform correction for distance to reference '
-                         'sensor: the location of the reference sensor is not '
-                         'specified for all selected channels.')
+        raise ValueError(
+            "Cannot perform correction for distance to reference "
+            "sensor: the location of the reference sensor is not "
+            "specified for all selected channels."
+        )
 
     # Compute angular distances to the reference sensor
     pos /= np.linalg.norm(pos, axis=1)[:, np.newaxis]
@@ -133,16 +143,21 @@ def _distance_correction(info, picks, x):
     return x - np.polyval(fit, angles)
 
 
-def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
-                      eeg_ref_corr=False, use_metrics=None,
-                      return_by_metric=False):
+def find_bad_channels(
+    epochs,
+    picks=None,
+    max_iter=1,
+    thres=3,
+    eeg_ref_corr=False,
+    use_metrics=None,
+    return_by_metric=False,
+):
     """Automatically find and mark bad channels.
 
     Implements the first step of the FASTER algorithm.
 
-    This function attempts to automatically mark bad EEG channels by performing
-    outlier detection. It operated on epoched data, to make sure only relevant
-    data is analyzed.
+    This function attempts to automatically mark bad EEG channels by performing outlier
+    detection. It operated on epoched data, to make sure only relevant data is analyzed.
 
     Parameters
     ----------
@@ -151,25 +166,25 @@ def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
     picks : list of int | None
         Channels to operate on. Defaults to EEG channels.
     thres : float
-        The threshold value, in standard deviations, to apply. A channel
-        crossing this threshold value is marked as bad. Defaults to 3.
+        The threshold value, in standard deviations, to apply. A channel crossing this
+        threshold value is marked as bad. Defaults to 3.
     max_iter : int
         The maximum number of iterations performed during outlier detection
         (defaults to 1, as in the original FASTER paper).
     eeg_ref_corr : bool
-        If the EEG data has been referenced using a single electrode setting
-        this parameter to True will enable a correction factor for the distance
-        of each electrode to the reference. If an average reference is applied,
-        or the mean of multiple reference electrodes, set this parameter to
-        False. Defaults to False, which disables the correction.
+        If the EEG data has been referenced using a single electrode setting this
+        parameter to True will enable a correction factor for the distance of each
+        electrode to the reference. If an average reference is applied, or the mean of
+        multiple reference electrodes, set this parameter to False. Defaults to False,
+        which disables the correction.
     use_metrics : list of str
         List of metrics to use. Can be any combination of:
             'variance', 'correlation', 'hurst', 'kurtosis', 'line_noise'
         Defaults to all of them.
     return_by_metric : bool
-        Whether to return the bad channels as a flat list (False, default) or
-        as a dictionary with the names of the used metrics as keys and the
-        bad channels found by this metric as values.
+        Whether to return the bad channels as a flat list (False, default) or as a
+        dictionary with the names of the used metrics as keys and the bad channels found
+        by this metric as values.
 
     Returns
     -------
@@ -177,17 +192,13 @@ def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
         The names of the bad EEG channels.
     """
     metrics = {
-        'variance': lambda x: np.var(x, axis=1),
-        'correlation': lambda x: np.nanmean(
-            np.ma.masked_array(
-                np.corrcoef(x),
-                np.identity(len(x), dtype=bool)
-            ),
-            axis=0),
-        'hurst': lambda x: hurst(x),
-        'kurtosis': lambda x: kurtosis(x, axis=1),
-        'line_noise': lambda x: _freqs_power(x, epochs.info['sfreq'],
-                                             [50, 60]),
+        "variance": lambda x: np.var(x, axis=1),
+        "correlation": lambda x: np.nanmean(
+            np.ma.masked_array(np.corrcoef(x), np.identity(len(x), dtype=bool)), axis=0
+        ),
+        "hurst": lambda x: hurst(x),
+        "kurtosis": lambda x: kurtosis(x, axis=1),
+        "line_noise": lambda x: _freqs_power(x, epochs.info["sfreq"], [50, 60]),
     }
 
     if picks is None:
@@ -203,14 +214,16 @@ def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
     bads = defaultdict(list)
     info = pick_info(epochs.info, picks, copy=True)
     for ch_type, chs in _picks_by_type(info):
-        logger.info('Bad channel detection on %s channels:' % ch_type.upper())
+        logger.info("Bad channel detection on %s channels:" % ch_type.upper())
         for metric in use_metrics:
             scores = metrics[metric](data[chs])
             if eeg_ref_corr:
                 scores = _distance_correction(epochs.info, picks, scores)
-            bad_channels = [epochs.ch_names[picks[chs[i]]]
-                            for i in _find_outliers(scores, thres, max_iter)]
-            logger.info('\tBad by %s: %s' % (metric, bad_channels))
+            bad_channels = [
+                epochs.ch_names[picks[chs[i]]]
+                for i in _find_outliers(scores, thres, max_iter)
+            ]
+            logger.info("\tBad by %s: %s" % (metric, bad_channels))
             bads[metric].append(bad_channels)
 
     bads = dict((k, np.concatenate(v).tolist()) for k, v in bads.items())
@@ -222,10 +235,10 @@ def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
 
 
 def _deviation(data):
-    """Computes the deviation from mean for each channel in a set of epochs.
+    """Compute the deviation from mean for each channel in a set of epochs.
 
-    This is not implemented as a lambda function, because the channel means
-    should be cached during the computation.
+    This is not implemented as a lambda function, because the channel means should be
+    cached during the computation.
 
     Parameters
     ----------
@@ -241,14 +254,15 @@ def _deviation(data):
     return ch_mean - np.mean(ch_mean, axis=0)
 
 
-def find_bad_epochs(epochs, picks=None, thres=3, max_iter=1, use_metrics=None,
-                    return_by_metric=False):
+def find_bad_epochs(
+    epochs, picks=None, thres=3, max_iter=1, use_metrics=None, return_by_metric=False
+):
     """Automatically find and mark bad epochs.
 
     Implements the second step of the FASTER algorithm.
 
-    This function attempts to automatically mark bad epochs by performing
-    outlier detection.
+    This function attempts to automatically mark bad epochs by performing outlier
+    detection.
 
     Parameters
     ----------
@@ -267,25 +281,23 @@ def find_bad_epochs(epochs, picks=None, thres=3, max_iter=1, use_metrics=None,
             'amplitude', 'variance', 'deviation'
         Defaults to all of them.
     return_by_metric : bool
-        Whether to return the bad channels as a flat list (False, default) or
-        as a dictionary with the names of the used metrics as keys and the
-        bad channels found by this metric as values.
+        Whether to return the bad channels as a flat list (False, default) or as a
+        dictionary with the names of the used metrics as keys and the bad channels found
+        by this metric as values.
 
     Returns
     -------
     bads : list of int
         The indices of the bad epochs.
     """
-
     metrics = {
-        'amplitude': lambda x: np.mean(np.ptp(x, axis=2), axis=1),
-        'deviation': lambda x: np.mean(_deviation(x), axis=1),
-        'variance': lambda x: np.mean(np.var(x, axis=2), axis=1),
+        "amplitude": lambda x: np.mean(np.ptp(x, axis=2), axis=1),
+        "deviation": lambda x: np.mean(_deviation(x), axis=1),
+        "variance": lambda x: np.mean(np.var(x, axis=2), axis=1),
     }
 
     if picks is None:
-        picks = mne.pick_types(epochs.info, meg=False, eeg=True,
-                               exclude='bads')
+        picks = mne.pick_types(epochs.info, meg=False, eeg=True, exclude="bads")
     if use_metrics is None:
         use_metrics = metrics.keys()
 
@@ -294,11 +306,11 @@ def find_bad_epochs(epochs, picks=None, thres=3, max_iter=1, use_metrics=None,
 
     bads = defaultdict(list)
     for ch_type, chs in _picks_by_type(info):
-        logger.info('Bad epoch detection on %s channels:' % ch_type.upper())
+        logger.info("Bad epoch detection on %s channels:" % ch_type.upper())
         for metric in use_metrics:
             scores = metrics[metric](data[:, chs])
             bad_epochs = _find_outliers(scores, thres, max_iter)
-            logger.info('\tBad by %s: %s' % (metric, bad_epochs))
+            logger.info("\tBad by %s: %s" % (metric, bad_epochs))
             bads[metric].append(bad_epochs)
 
     bads = dict((k, np.concatenate(v).tolist()) for k, v in bads.items())
@@ -314,13 +326,13 @@ def _power_gradient(data, sfreq, prange):
     Parameters
     ----------
     data : array, shape (n_components, n_samples)
-        The timeseries to estimate signal power for. The last dimension
-        is presumed to be time.
+        The timeseries to estimate signal power for. The last dimension is presumed to
+        be time.
     sfreq : float
         The sample rate of the timeseries.
     prange : pair of floats
-        The (lower, upper) frequency limits of the power spectrum to use. In
-        the FASTER paper, they set these to the passband of the lowpass filter.
+        The (lower, upper) frequency limits of the power spectrum to use. In the FASTER
+        paper, they set these to the passband of the lowpass filter.
 
     Returns
     -------
@@ -332,23 +344,34 @@ def _power_gradient(data, sfreq, prange):
     # Limit power spectrum to selected frequencies
     start, stop = (np.searchsorted(fs, p) for p in prange)
     if start >= ps.shape[1]:
-        raise ValueError(("Sample rate insufficient to estimate {} Hz power. "
-                          "Use the 'power_gradient_range' parameter to tweak "
-                          "the tested frequencies for this metric or use the "
-                          "'metrics' parameter to disable the "
-                          "'power_gradient' metric.").format(prange[0]))
+        raise ValueError(
+            (
+                "Sample rate insufficient to estimate {} Hz power. "
+                "Use the 'power_gradient_range' parameter to tweak "
+                "the tested frequencies for this metric or use the "
+                "'metrics' parameter to disable the "
+                "'power_gradient' metric."
+            ).format(prange[0])
+        )
     ps = ps[:, start:stop]
 
     # Compute mean gradients
     return np.mean(np.diff(ps), axis=1)
 
 
-def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
-                        prange=None, return_by_metric=False):
-    """Implements the third step of the FASTER algorithm.
+def find_bad_components(
+    ica,
+    epochs,
+    thres=3,
+    max_iter=1,
+    use_metrics=None,
+    prange=None,
+    return_by_metric=False,
+):
+    """Perform the third step of the FASTER algorithm.
 
-    This function attempts to automatically mark bad ICA components by
-    performing outlier detection.
+    This function attempts to automatically mark bad ICA components by performing
+    outlier detection.
 
     Parameters
     ----------
@@ -357,8 +380,8 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
     epochs : Instance of Epochs
         The untransformed epochs to analyze.
     thres : float
-        The threshold value, in standard deviations, to apply. A component
-        crossing this threshold value is marked as bad. Defaults to 3.
+        The threshold value, in standard deviations, to apply. A component crossing this
+        threshold value is marked as bad. Defaults to 3.
     max_iter : int
         The maximum number of iterations performed during outlier detection
         (defaults to 1, as in the original FASTER paper).
@@ -368,21 +391,21 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
             'median_gradient'
         Defaults to all of them.
     prange : None | pair of floats
-        The (lower, upper) frequency limits of the power spectrum to use for
-        the power gradient computation. In the FASTER paper, they set these to
-        the passband of the highpass and lowpass filter. If None, defaults to
-        the 'highpass' and 'lowpass' filter settings in ica.info.
+        The (lower, upper) frequency limits of the power spectrum to use for the power
+        gradient computation. In the FASTER paper, they set these to the passband of the
+        highpass and lowpass filter. If None, defaults to the 'highpass' and 'lowpass'
+        filter settings in ica.info.
     return_by_metric : bool
-        Whether to return the bad channels as a flat list (False, default) or
-        as a dictionary with the names of the used metrics as keys and the
-        bad channels found by this metric as values.
+        Whether to return the bad channels as a flat list (False, default) or as a
+        dictionary with the names of the used metrics as keys and the bad channels found
+        by this metric as values.
 
     Returns
     -------
     bads : list of int
         The indices of the bad components.
 
-    See also
+    See Also
     --------
     ICA.find_bads_ecg
     ICA.find_bads_eog
@@ -391,25 +414,23 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
     source_data = source_data.reshape(source_data.shape[0], -1)
 
     if prange is None:
-        prange = (ica.info['highpass'], ica.info['lowpass'])
+        prange = (ica.info["highpass"], ica.info["lowpass"])
     if len(prange) != 2:
-        raise ValueError('prange must be a pair of floats')
+        raise ValueError("prange must be a pair of floats")
 
     metrics = {
-        'eog_correlation': lambda x: x.find_bads_eog(epochs)[1],
-        'kurtosis': lambda x: kurtosis(
-            np.dot(
-                x.mixing_matrix_.T,
-                x.pca_components_[:x.n_components_]),
-            axis=1),
-        'power_gradient': lambda x: _power_gradient(source_data,
-                                                    ica.info['sfreq'],
-                                                    prange),
-        'hurst': lambda x: hurst(source_data),
-        'median_gradient': lambda x: np.median(np.abs(np.diff(source_data)),
-                                               axis=1),
-        'line_noise': lambda x: _freqs_power(source_data,
-                                             epochs.info['sfreq'], [50, 60]),
+        "eog_correlation": lambda x: x.find_bads_eog(epochs)[1],
+        "kurtosis": lambda x: kurtosis(
+            np.dot(x.mixing_matrix_.T, x.pca_components_[: x.n_components_]), axis=1
+        ),
+        "power_gradient": lambda x: _power_gradient(
+            source_data, ica.info["sfreq"], prange
+        ),
+        "hurst": lambda x: hurst(source_data),
+        "median_gradient": lambda x: np.median(np.abs(np.diff(source_data)), axis=1),
+        "line_noise": lambda x: _freqs_power(
+            source_data, epochs.info["sfreq"], [50, 60]
+        ),
     }
 
     if use_metrics is None:
@@ -420,7 +441,7 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
         scores = np.atleast_2d(metrics[metric](ica))
         for s in scores:
             bad_comps = _find_outliers(s, thres, max_iter)
-            logger.info('Bad by %s:\n\t%s' % (metric, bad_comps))
+            logger.info("Bad by %s:\n\t%s" % (metric, bad_comps))
             bads[metric].append(bad_comps)
 
     bads = dict((k, np.concatenate(v).tolist()) for k, v in bads.items())
@@ -430,10 +451,16 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
         return _combine_indices(bads)
 
 
-def find_bad_channels_in_epochs(epochs, picks=None, thres=3, max_iter=1,
-                                eeg_ref_corr=False, use_metrics=None,
-                                return_by_metric=False):
-    """Implements the fourth step of the FASTER algorithm.
+def find_bad_channels_in_epochs(
+    epochs,
+    picks=None,
+    thres=3,
+    max_iter=1,
+    eeg_ref_corr=False,
+    use_metrics=None,
+    return_by_metric=False,
+):
+    """Perform the fourth step of the FASTER algorithm.
 
     This function attempts to automatically mark bad channels in each epochs by
     performing outlier detection.
@@ -445,57 +472,54 @@ def find_bad_channels_in_epochs(epochs, picks=None, thres=3, max_iter=1,
     picks : list of int | None
         Channels to operate on. Defaults to EEG channels.
     thres : float
-        The threshold value, in standard deviations, to apply. An epoch
-        crossing this threshold value is marked as bad. Defaults to 3.
+        The threshold value, in standard deviations, to apply. An epoch crossing this
+        threshold value is marked as bad. Defaults to 3.
     max_iter : int
         The maximum number of iterations performed during outlier detection
         (defaults to 1, as in the original FASTER paper).
     eeg_ref_corr : bool
-        If the EEG data has been referenced using a single electrode setting
-        this parameter to True will enable a correction factor for the distance
-        of each electrode to the reference. If an average reference is applied,
-        or the mean of multiple reference electrodes, set this parameter to
-        False. Defaults to False, which disables the correction.
+        If the EEG data has been referenced using a single electrode setting this
+        parameter to True will enable a correction factor for the distance of each
+        electrode to the reference. If an average reference is applied, or the mean of
+        multiple reference electrodes, set this parameter to False. Defaults to False,
+        which disables the correction.
     use_metrics : list of str
         List of metrics to use. Can be any combination of:
             'amplitude', 'variance', 'deviation', 'median_gradient'
         Defaults to all of them.
     return_by_metric : bool
-        Whether to return the bad channels as a flat list (False, default) or
-        as a dictionary with the names of the used metrics as keys and the
-        bad channels found by this metric as values.
+        Whether to return the bad channels as a flat list (False, default) or as a
+        dictionary with the names of the used metrics as keys and the bad channels found
+        by this metric as values.
 
     Returns
     -------
     bads : list of lists of int
         For each epoch, the indices of the bad channels.
     """
-
     metrics = {
-        'amplitude': lambda x: np.ptp(x, axis=2),
-        'deviation': lambda x: _deviation(x),
-        'variance': lambda x: np.var(x, axis=2),
-        'median_gradient': lambda x: np.median(np.abs(np.diff(x)), axis=2),
-        'line_noise': lambda x: _freqs_power(x, epochs.info['sfreq'],
-                                             [50, 60]),
+        "amplitude": lambda x: np.ptp(x, axis=2),
+        "deviation": lambda x: _deviation(x),
+        "variance": lambda x: np.var(x, axis=2),
+        "median_gradient": lambda x: np.median(np.abs(np.diff(x)), axis=2),
+        "line_noise": lambda x: _freqs_power(x, epochs.info["sfreq"], [50, 60]),
     }
 
     if picks is None:
-        picks = mne.pick_types(epochs.info, meg=False, eeg=True,
-                               exclude='bads')
+        picks = mne.pick_types(epochs.info, meg=False, eeg=True, exclude="bads")
     if use_metrics is None:
         use_metrics = metrics.keys()
 
     info = pick_info(epochs.info, picks, copy=True)
     data = epochs.get_data(copy=False)[:, picks]
-    bads = dict((m, np.zeros((len(data), len(picks)), dtype=bool)) for
-                m in metrics)
+    bads = dict((m, np.zeros((len(data), len(picks)), dtype=bool)) for m in metrics)
     for ch_type, chs in _picks_by_type(info):
-        ch_names = [info['ch_names'][k] for k in chs]
+        ch_names = [info["ch_names"][k] for k in chs]
         chs = np.array(chs)
         for metric in use_metrics:
-            logger.info('Bad channel-in-epoch detection on %s channels:'
-                        % ch_type.upper())
+            logger.info(
+                "Bad channel-in-epoch detection on %s channels:" % ch_type.upper()
+            )
             s_epochs = metrics[metric](data[:, chs])
             for i_epochs, scores in enumerate(s_epochs):
                 if eeg_ref_corr:
@@ -503,8 +527,9 @@ def find_bad_channels_in_epochs(epochs, picks=None, thres=3, max_iter=1,
                 outliers = _find_outliers(scores, thres, max_iter)
                 if len(outliers) > 0:
                     bad_segment = [ch_names[k] for k in outliers]
-                    logger.info('Epoch %d, Bad by %s:\n\t%s' % (
-                        i_epochs, metric, bad_segment))
+                    logger.info(
+                        "Epoch %d, Bad by %s:\n\t%s" % (i_epochs, metric, bad_segment)
+                    )
                     bads[metric][i_epochs, chs[outliers]] = True
 
     info = pick_info(epochs.info, picks, copy=True)
@@ -518,42 +543,40 @@ def find_bad_channels_in_epochs(epochs, picks=None, thres=3, max_iter=1,
 
 
 def run_faster(epochs, thres=3, copy=True):
-    """Run the entire FASTER pipeline on the data.
-    """
+    """Run the entire FASTER pipeline on the data."""
     if copy:
         epochs = epochs.copy()
 
     # Step one
-    logger.info('Step 1: mark bad channels')
-    epochs.info['bads'] += find_bad_channels(epochs, thres=5)
+    logger.info("Step 1: mark bad channels")
+    epochs.info["bads"] += find_bad_channels(epochs, thres=5)
 
     # Step two
-    logger.info('Step 2: mark bad epochs')
+    logger.info("Step 2: mark bad epochs")
     bad_epochs = find_bad_epochs(epochs, thres=thres)
     good_epochs = list(set(range(len(epochs))).difference(set(bad_epochs)))
     epochs = epochs[good_epochs]
 
     # Step three (using the build-in MNE functionality for this)
-    logger.info('Step 3: mark bad ICA components')
-    picks = mne.pick_types(epochs.info, meg=False, eeg=True, eog=True,
-                           exclude='bads')
+    logger.info("Step 3: mark bad ICA components")
+    picks = mne.pick_types(epochs.info, meg=False, eeg=True, eog=True, exclude="bads")
     ica = mne.preprocessing.ICA(len(picks)).fit(epochs, picks=picks)
     ica.exclude = find_bad_components(ica, epochs, thres=thres)
     ica.apply(epochs)
     epochs.apply_baseline(epochs.baseline)
 
     # Step four
-    logger.info('Step 4: mark bad channels for each epoch')
+    logger.info("Step 4: mark bad channels for each epoch")
     bad_channels_per_epoch = find_bad_channels_in_epochs(epochs, thres=thres)
     for i, b in enumerate(bad_channels_per_epoch):
         if len(b) > 0:
             epoch = epochs[i]
-            epoch.info['bads'] += b
+            epoch.info["bads"] += b
             epoch.interpolate_bads()
             epochs._data[i, :, :] = epoch._data[0, :, :]
 
     # Now that the data is clean, apply average reference
-    epochs.set_eeg_reference('average')
+    epochs.set_eeg_reference("average")
 
     # That's all for now
     return epochs
