@@ -1,15 +1,18 @@
-import numpy as np
-from nose.tools import (assert_true, assert_raises, assert_equal)
-from numpy.testing import (assert_allclose, assert_almost_equal)
 import mne
-
-from mne_faster import (hurst, find_bad_channels, find_bad_epochs,
-                        find_bad_channels_in_epochs)
+import numpy as np
+import pytest
+from mne_faster import (
+    find_bad_channels,
+    find_bad_channels_in_epochs,
+    find_bad_epochs,
+    hurst,
+)
 from mne_faster.faster import _freqs_power
+from numpy.testing import assert_allclose, assert_almost_equal
 
 # Signal properties used in the tests
 length = 2  # in seconds
-srate = 200.  # in Hertz
+srate = 200.0  # in Hertz
 n_channels = 32
 n_epochs = 100
 n_samples = int(length * srate)
@@ -21,14 +24,13 @@ rng = np.random.RandomState(123)
 
 def test_hurst():
     """Test internal hurst exponent function."""
-
     # Hurst exponent of a sine wave
     p = np.atleast_2d(np.sin(1000))
     assert_almost_equal(p, 0.82687954)
 
     # Positive first derivative, hurst > 1
     p = np.atleast_2d(np.log10(np.cumsum(rng.randn(1000) + 100)))
-    assert_true(hurst(p) > 1)
+    assert hurst(p) > 1
 
     # First derivative alternating around zero, hurst ~ 0
     p = np.atleast_2d(np.log10(rng.randn(1000) + 1000))
@@ -51,36 +53,36 @@ def test_freqs_power():
 
     # These frequencies should be present
     for f in freqs:
-        assert_almost_equal(_freqs_power(signal, srate, [f]), 3 + 1 / 3.)
+        assert_almost_equal(_freqs_power(signal, srate, [f]), 3 + 1 / 3.0)
 
     # The function should sum the individual frequency  powers
-    assert_almost_equal(_freqs_power(signal, srate, freqs),
-                        len(freqs) * (3 + 1 / 3.))
+    assert_almost_equal(_freqs_power(signal, srate, freqs), len(freqs) * (3 + 1 / 3.0))
 
     # These frequencies should not be present
     assert_almost_equal(_freqs_power(signal, srate, [2, 4, 13, 23, 35]), 0)
 
     # Insufficient sample rate to calculate this frequency
-    assert_raises(ValueError, _freqs_power, signal, srate, [51])
+    with pytest.raises(ValueError):
+        _freqs_power(signal, srate, [51])
 
 
 def _baseline_signal():
-    """Helper function to create the baseline signal"""
+    """Create the baseline signal."""
     signal = np.tile(np.sin(time), (n_epochs, n_channels, 1))
     noise = rng.randn(n_epochs, n_channels, n_samples)
     return signal, noise
 
 
 def _to_epochs(signal, noise):
-    """Helper function to create the epochs object"""
+    """Create a testing epochs object."""
     events = np.tile(np.arange(n_epochs)[:, np.newaxis], (1, 3))
-    return mne.EpochsArray(signal + noise,
-                           mne.create_info(n_channels, srate, 'eeg'),
-                           events)
+    return mne.EpochsArray(
+        signal + noise, mne.create_info(n_channels, srate, "eeg"), events
+    )
 
 
 def test_find_bad_channels():
-    """Test detecting bad channels through outlier detection"""
+    """Test detecting bad channels through outlier detection."""
     signal, noise = _baseline_signal()
 
     # This channel has more noise
@@ -101,22 +103,21 @@ def test_find_bad_channels():
     # TODO: deviant hurst
     epochs = _to_epochs(signal, noise)
     bads = find_bad_channels(epochs, max_iter=1, return_by_metric=True)
-    assert_equal(bads, {
-        'variance': ['0'],
-        'correlation': ['1'],
-        'line_noise': ['2', '3'],
-        'kurtosis': ['4'],
-        'hurst': ['2'],
-    })
+    assert bads == dict(
+        variance=["0"],
+        correlation=["1"],
+        line_noise=["2", "3"],
+        kurtosis=["4"],
+        hurst=["2"],
+    )
 
     # Test picks
-    bads = find_bad_channels(epochs, return_by_metric=True,
-                             picks=range(3, n_channels))
-    assert_equal(bads['line_noise'], ['3'])
+    bads = find_bad_channels(epochs, return_by_metric=True, picks=range(3, n_channels))
+    assert bads["line_noise"] == ["3"]
 
 
 def test_find_bad_epochs():
-    """Test detecting bad epochs through outlier detection"""
+    """Test detecting bad epochs through outlier detection."""
     signal, noise = _baseline_signal()
 
     # This epoch has more noise
@@ -131,24 +132,23 @@ def test_find_bad_epochs():
     epochs = _to_epochs(signal, noise)
 
     bads = find_bad_epochs(epochs, max_iter=1, return_by_metric=True)
-    assert_equal(bads, {
-        'variance': [0],
-        'deviation': [1],
-        'amplitude': [0, 2],
-    })
+    assert bads == dict(
+        variance=[0],
+        deviation=[1],
+        amplitude=[0, 2],
+    )
 
     # Test picks
-    bads = find_bad_epochs(epochs, return_by_metric=True,
-                           picks=range(3, n_channels))
-    assert_equal(bads, {
-        'variance': [0],
-        'deviation': [1],
-        'amplitude': [0, 2],
-    })
+    bads = find_bad_epochs(epochs, return_by_metric=True, picks=range(3, n_channels))
+    assert bads == dict(
+        variance=[0],
+        deviation=[1],
+        amplitude=[0, 2],
+    )
 
 
 def test_find_bad_channels_in_epochs():
-    """Test detecting bad channels in each epoch through outlier detection"""
+    """Test detecting bad channels in each epoch through outlier detection."""
     signal, noise = _baseline_signal()
 
     # This channel/epoch combination has more noise
@@ -166,35 +166,45 @@ def test_find_bad_channels_in_epochs():
     epochs = _to_epochs(signal, noise)
 
     bads = find_bad_channels_in_epochs(epochs, return_by_metric=True, thres=5)
-    assert_equal(bads['variance'][0], ['0'])
-    assert_equal(bads['deviation'][1], ['1'])
-    assert_equal(bads['amplitude'][2], ['2'])
-    assert_equal(bads['median_gradient'][0], ['0'])
-    assert_equal(bads['line_noise'][3], ['3'])
+    assert bads["variance"][0] == ["0"]
+    assert bads["deviation"][1] == ["1"]
+    assert bads["amplitude"][2] == ["2"]
+    assert bads["median_gradient"][0] == ["0"]
+    assert bads["line_noise"][3] == ["3"]
 
     # Test picks
-    bads = find_bad_channels_in_epochs(epochs, return_by_metric=True,
-                                       thres=5, picks=range(3, n_channels))
-    assert_equal(bads['variance'][0], [])
-    assert_equal(bads['deviation'][1], [])
-    assert_equal(bads['amplitude'][2], [])
-    assert_equal(bads['median_gradient'][0], [])
-    assert_equal(bads['line_noise'][3], ['3'])
+    bads = find_bad_channels_in_epochs(
+        epochs, return_by_metric=True, thres=5, picks=range(3, n_channels)
+    )
+    assert bads["variance"][0] == []
+    assert bads["deviation"][1] == []
+    assert bads["amplitude"][2] == []
+    assert bads["median_gradient"][0] == []
+    assert bads["line_noise"][3] == ["3"]
 
 
 def test_distance_correction():
-    """Test correcting for the distance of each electrode to the reference"""
+    """Test correcting for the distance of each electrode to the reference."""
     signal, noise = _baseline_signal()
     epochs = _to_epochs(signal, noise)
     for ch in range(32):
         # Set electrode position and reference position
-        epochs.info['chs'][ch]['loc'] = np.array([
-            np.sin(ch * np.pi / 32.),  # x
-            np.cos(ch * np.pi / 32.),  # y
-            0.,  # z
-            0., 1., 0.,  # x,y,z for reference electrode
-            0., 0., 0., 0., 0., 0.,
-        ])
+        epochs.info["chs"][ch]["loc"] = np.array(
+            [
+                np.sin(ch * np.pi / 32.0),  # x
+                np.cos(ch * np.pi / 32.0),  # y
+                0.0,  # z
+                0.0,
+                1.0,
+                0.0,  # x,y,z for reference electrode
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ]
+        )
 
         # Make the signal amplitude increase with the distance to the sensor.
         # This is not noise, but a natural phenomenon.
@@ -210,30 +220,30 @@ def test_distance_correction():
     bads = find_bad_channels(
         epochs,
         eeg_ref_corr=False,
-        use_metrics=['variance'],
+        use_metrics=["variance"],
     )
-    assert_equal(bads, [])
+    assert bads == []
 
     # With distance correction, channel 3 is correctly found
     bads = find_bad_channels(
         epochs,
         eeg_ref_corr=True,
-        use_metrics=['variance'],
+        use_metrics=["variance"],
     )
-    assert_equal(bads, ['3'])
+    assert bads == ["3"]
 
     # Without distance correction, channel 5 is not marked as bad in epoch 3
     bads = find_bad_channels_in_epochs(
         epochs,
         eeg_ref_corr=False,
-        use_metrics=['variance'],
+        use_metrics=["variance"],
     )
-    assert_equal(bads[3], [])
+    assert bads[3] == []
 
     # With distance correction, channel 5 is correctly found in epoch 3
     bads = find_bad_channels_in_epochs(
         epochs,
         eeg_ref_corr=True,
-        use_metrics=['variance'],
+        use_metrics=["variance"],
     )
-    assert_equal(bads[3], ['5'])
+    assert bads[3] == ["5"]

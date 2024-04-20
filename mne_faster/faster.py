@@ -5,7 +5,8 @@ import mne
 from scipy.stats import kurtosis
 from mne.preprocessing.bads import _find_outliers
 from mne.utils import logger
-from mne.io.pick import pick_info, _picks_by_type
+from mne import pick_info
+from mne._fiff.pick import _picks_by_type
 
 
 def _bad_mask_to_names(info, bad_mask):
@@ -195,7 +196,7 @@ def find_bad_channels(epochs, picks=None, max_iter=1, thres=3,
         use_metrics = metrics.keys()
 
     # Concatenate epochs in time
-    data = epochs.get_data()[:, picks]
+    data = epochs.get_data(copy=False)[:, picks]
     data = data.transpose(1, 0, 2).reshape(data.shape[1], -1)
 
     # Find bad channels
@@ -289,7 +290,7 @@ def find_bad_epochs(epochs, picks=None, thres=3, max_iter=1, use_metrics=None,
         use_metrics = metrics.keys()
 
     info = pick_info(epochs.info, picks, copy=True)
-    data = epochs.get_data()[:, picks]
+    data = epochs.get_data(copy=False)[:, picks]
 
     bads = defaultdict(list)
     for ch_type, chs in _picks_by_type(info):
@@ -386,7 +387,7 @@ def find_bad_components(ica, epochs, thres=3, max_iter=1, use_metrics=None,
     ICA.find_bads_ecg
     ICA.find_bads_eog
     """
-    source_data = ica.get_sources(epochs).get_data().transpose(1, 0, 2)
+    source_data = ica.get_sources(epochs).get_data(copy=False).transpose(1, 0, 2)
     source_data = source_data.reshape(source_data.shape[0], -1)
 
     if prange is None:
@@ -486,7 +487,7 @@ def find_bad_channels_in_epochs(epochs, picks=None, thres=3, max_iter=1,
         use_metrics = metrics.keys()
 
     info = pick_info(epochs.info, picks, copy=True)
-    data = epochs.get_data()[:, picks]
+    data = epochs.get_data(copy=False)[:, picks]
     bads = dict((m, np.zeros((len(data), len(picks)), dtype=bool)) for
                 m in metrics)
     for ch_type, chs in _picks_by_type(info):
