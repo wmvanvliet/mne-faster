@@ -1,3 +1,5 @@
+"""Implementation of all the FASTER steps."""
+
 from collections import defaultdict
 
 import mne
@@ -35,6 +37,7 @@ def hurst(x):
     -------
     h : float
         The estimation of the Hurst exponent for the given timeseries.
+
     """
     y = np.cumsum(np.diff(x, axis=1), axis=1)
 
@@ -75,6 +78,7 @@ def _efficient_welch(data, sfreq):
         The frequencies for which the power spectra was calculated.
     ps : array, shape (..., frequencies)
         The power spectra for each timeseries.
+
     """
     from scipy.signal import welch
 
@@ -116,6 +120,7 @@ def _distance_correction(info, picks, x):
     -------
     x_corr : list of float
         values in x corrected for the distance to reference sensor.
+
     """
     pos = np.array([info["chs"][ch]["loc"][:3] for ch in picks])
     ref_pos = np.array([info["chs"][ch]["loc"][3:6] for ch in picks])
@@ -190,6 +195,7 @@ def find_bad_channels(
     -------
     bads : list of str
         The names of the bad EEG channels.
+
     """
     metrics = {
         "variance": lambda x: np.var(x, axis=1),
@@ -249,6 +255,7 @@ def _deviation(data):
     -------
     dev : list of float
         For each epoch, the mean deviation of the channels.
+
     """
     ch_mean = np.mean(data, axis=2)
     return ch_mean - np.mean(ch_mean, axis=0)
@@ -289,6 +296,7 @@ def find_bad_epochs(
     -------
     bads : list of int
         The indices of the bad epochs.
+
     """
     metrics = {
         "amplitude": lambda x: np.mean(np.ptp(x, axis=2), axis=1),
@@ -338,6 +346,7 @@ def _power_gradient(data, sfreq, prange):
     -------
     grad : array of float
         The gradients of the timeseries.
+
     """
     fs, ps = _efficient_welch(data, sfreq)
 
@@ -409,6 +418,7 @@ def find_bad_components(
     --------
     ICA.find_bads_ecg
     ICA.find_bads_eog
+
     """
     source_data = ica.get_sources(epochs).get_data(copy=False).transpose(1, 0, 2)
     source_data = source_data.reshape(source_data.shape[0], -1)
@@ -496,6 +506,7 @@ def find_bad_channels_in_epochs(
     -------
     bads : list of lists of int
         For each epoch, the indices of the bad channels.
+
     """
     metrics = {
         "amplitude": lambda x: np.ptp(x, axis=2),

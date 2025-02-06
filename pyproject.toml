@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mne-faster"
+authors = [
+    {name = "Marijn van Vliet", email = "w.m.vanvliet@gmail.com"},
+]
+description = "MNE-FASTER: automatic bad channel/epoch/component detection"
+requires-python = ">=3.9"
+keywords = ["rsa", "meg", "eeg", "neuroimaging", "mne-python"]
+license = {text = "BSD-3-Clause"}
+classifiers = [
+	"Intended Audience :: Science/Research",
+	"Intended Audience :: Developers",
+	"License :: OSI Approved",
+	"Programming Language :: Python",
+	"Topic :: Software Development",
+	"Topic :: Scientific/Engineering",
+	"Operating System :: Microsoft :: Windows",
+	"Operating System :: POSIX",
+	"Operating System :: Unix",
+	"Operating System :: MacOS",
+]
+dependencies = ["mne"]
+dynamic = ["version"]
+
+[project.urls]
+"Bug Tracker" = "https://github.com/wmvanvliet/mne-faster/issues/"
+"Source Code" = "https://github.com/wmvanvliet/mne-faster"
+
+[tool.setuptools]
+packages = ["mne_faster"]
+
+[tool.setuptools.dynamic]
+version = {attr = "mne_faster.__version__"}
+readme = {file = ["README.rst"]}
+
+[tool.pytest.ini_options]
+addopts = """
+    --showlocals --durations=20 --doctest-modules -ra --cov-report=term-missing
+    --doctest-ignore-import-errors --junit-xml=junit-results.xml
+    --ignore=doc --ignore=examples --ignore=tutorials --cov=mne_faster
+"""
+junit_family = "xunit2"
+
+[tool.ruff]
+exclude = ["__init__.py"]
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["E", "F", "D", "W"]
+ignore = ["D107", "D203", "D213"]
+per-file-ignores = {"examples/*.py" = ["D205", "D400", "D415", "D212"], "__init__.py" = ["E402"]} 
+
+[tool.ruff.format]
+quote-style = "double"

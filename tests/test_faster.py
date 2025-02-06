@@ -1,3 +1,5 @@
+"""Unit tests for the FASTER pipeline."""
+
 import mne
 import numpy as np
 import pytest
