@@ -3,33 +3,31 @@
 EEG artifact correction using FASTER
 ====================================
 
-In this example, a variety of metrics are used to detect channels and epochs
-that contain artifacts. Rejection and interpolation are used to clean the EEG
-data.
+In this example, a variety of metrics are used to detect channels and epochs that
+contain artifacts. Rejection and interpolation are used to clean the EEG data.
 
 References
 ----------
-[1] Nolan H., Whelan R. and Reilly RB. FASTER: fully automated
-    statistical thresholding for EEG artifact rejection. Journal of
-    Neuroscience Methods, vol. 192, issue 1, pp. 152-162, 2010.
+[1] Nolan H., Whelan R. and Reilly RB. FASTER: fully automated statistical thresholding
+    for EEG artifact rejection. Journal of Neuroscience Methods, vol. 192, issue 1, pp.
+    152-162, 2010.
 
 """
 
 import mne
 from mne import io
 from mne.datasets import sample
-
 from mne_faster import (
     find_bad_channels,
-    find_bad_epochs,
-    find_bad_components,
     find_bad_channels_in_epochs,
+    find_bad_components,
+    find_bad_epochs,
 )
 
 # Load raw data
 data_path = sample.data_path()
-raw_fname = data_path + "/MEG/sample/sample_audvis_filt-0-40_raw.fif"
-event_fname = data_path + "/MEG/sample/sample_audvis_filt-0-40_raw-eve.fif"
+raw_fname = data_path / "MEG/sample/sample_audvis_filt-0-40_raw.fif"
+event_fname = data_path / "MEG/sample/sample_audvis_filt-0-40_raw-eve.fif"
 
 raw = io.read_raw_fif(raw_fname, preload=True)
 raw.info["bads"] = []  # bads are going to be detected automatically
@@ -41,7 +39,7 @@ raw = raw.pick_types(meg=False, eeg=True, eog=True)
 
 # Keep whatever EEG reference the amplifier used for now. After the data is
 # cleaned, we will re-reference to an average reference.
-raw, _ = io.set_eeg_reference(raw, [])
+raw.set_eeg_reference([])
 
 # Highpass filter the EEG and EOG data to eliminate drifts
 # NOTE: we do not lowpass filter here, because power line noise is useful for
