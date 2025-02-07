@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = ["mne"]
 dynamic = ["version"]
+readme = {content-type = "text/x-rst", file = "README.rst"}
 
 [project.urls]
 "Bug Tracker" = "https://github.com/wmvanvliet/mne-faster/issues/"
@@ -33,7 +34,6 @@ dynamic = ["version"]
 
 [tool.setuptools]
 packages = ["mne_faster"]
-readme = {content-type = "text/x-rst", file = "README.rst"}
 
 [tool.setuptools.dynamic]
 version = {attr = "mne_faster.__version__"}
