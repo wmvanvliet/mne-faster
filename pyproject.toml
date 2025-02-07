@@ -33,10 +33,10 @@ dynamic = ["version"]
 
 [tool.setuptools]
 packages = ["mne_faster"]
+readme = {file = ["README.rst"]}
 
 [tool.setuptools.dynamic]
 version = {attr = "mne_faster.__version__"}
-readme = {file = ["README.rst"]}
 
 [tool.pytest.ini_options]
 addopts = """
