@@ -33,7 +33,7 @@ dynamic = ["version"]
 
 [tool.setuptools]
 packages = ["mne_faster"]
-readme = {file = ["README.rst"]}
+readme = {content-type = "text/x-rst", file = "README.rst"}
 
 [tool.setuptools.dynamic]
 version = {attr = "mne_faster.__version__"}
