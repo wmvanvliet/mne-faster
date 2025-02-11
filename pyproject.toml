@@ -25,17 +25,18 @@ classifiers = [
 ]
 dependencies = ["mne"]
 dynamic = ["version"]
+readme = {content-type = "text/x-rst", file = "README.rst"}
 
 [project.urls]
 "Bug Tracker" = "https://github.com/wmvanvliet/mne-faster/issues/"
 "Source Code" = "https://github.com/wmvanvliet/mne-faster"
+"Homepage" = "https://github.com/wmvanvliet/mne-faster"
 
 [tool.setuptools]
 packages = ["mne_faster"]
 
 [tool.setuptools.dynamic]
 version = {attr = "mne_faster.__version__"}
-readme = {file = ["README.rst"]}
 
 [tool.pytest.ini_options]
 addopts = """
@@ -53,7 +54,7 @@ indent-width = 4
 [tool.ruff.lint]
 select = ["E", "F", "D", "W"]
 ignore = ["D107", "D203", "D213"]
-per-file-ignores = {"examples/*.py" = ["D205", "D400", "D415", "D212"], "__init__.py" = ["E402"]} 
+per-file-ignores = {"examples/*.py" = ["D205", "D400", "D415", "D212"], "__init__.py" = ["E402"]}
 
 [tool.ruff.format]
 quote-style = "double"
